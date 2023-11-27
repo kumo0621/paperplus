@@ -1,0 +1,12 @@
+name: paperplus
+version: '${project.version}'
+main: com.github.kumo0621.paperplus.Paperplus
+api-version: '1.20'
+commands:
+  ad:
+    aliases: ad
+    permission: chat
+
+permissions:
+  chat:
+    default: true
