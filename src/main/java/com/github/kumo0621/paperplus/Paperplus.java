@@ -7,6 +7,7 @@ import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -14,7 +15,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 
-public final class Paperplus extends JavaPlugin {
+public class Paperplus extends JavaPlugin implements TabCompleter {
     private Queue<Advertisement> adQueue = new LinkedList<>();
     private BossBar currentBossBar = null;
     private static Economy econ = null;
@@ -54,26 +55,22 @@ public final class Paperplus extends JavaPlugin {
         if (cmd.getName().equalsIgnoreCase("ad") && sender instanceof Player) {
             Player player = (Player) sender;
 
+            // コマンドの説明と引数の形式を示す
             if (args.length < 3) {
-                player.sendMessage("/ad 時間 価格(1時間あたり) 内容");
+                player.sendMessage("コマンドの使い方: /ad <時間帯(時間)> <価格(1時間あたり)> <内容>");
                 return true;
             }
 
             try {
-                int duration = Integer.parseInt(args[0]) * 60; // 分を秒に変換
-                double pricePerHour = Double.parseDouble(args[1]);
-                String message = args[2];
+                int durationInHours = Integer.parseInt(args[0]); // 時間単位で入力される時間
+                double pricePerHour = Double.parseDouble(args[1]); // 1時間あたりの価格
+                String message = args[2]; // 宣伝の内容
 
-                double minPricePerHour = getConfig().getDouble("min-price-per-hour");
-                if (pricePerHour < minPricePerHour) {
-                    player.sendMessage("入力された価格が最低価格以下です。最低価格: " + minPricePerHour);
-                    return true;
-                }
+                double totalCost = pricePerHour * durationInHours; // 総コストの計算
 
-                double totalCost = (pricePerHour / 60) * duration;
-
+                // 所持金チェック
                 if (getEconomy().getBalance(player) < totalCost) {
-                    player.sendMessage("所持金が不足しています。必要金額: " + totalCost);
+                    player.sendMessage("所持金が不足しています。必要金額: " + totalCost + " 円");
                     return true;
                 }
 
@@ -81,18 +78,36 @@ public final class Paperplus extends JavaPlugin {
                 getEconomy().withdrawPlayer(player, totalCost);
 
                 // 宣伝リストに追加
-                adList.add(new Advertisement(message, duration, totalCost));
+                adList.add(new Advertisement(message, durationInHours * 3600, totalCost));
                 if (currentBossBar == null) {
                     showRandomAd();
                 }
 
-                player.sendMessage("宣伝が予約されました。料金: " + totalCost);
+                player.sendMessage("宣伝が予約されました。料金: " + totalCost + "円");
             } catch (NumberFormatException e) {
                 player.sendMessage("無効な数値が入力されました。");
             }
             return true;
         }
         return false;
+    }
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (command.getName().equalsIgnoreCase("ad")) {
+            List<String> completions = new ArrayList<>();
+            if (args.length == 1) {
+                // 第一引数の候補を追加
+                completions.add("時間");
+            } else if (args.length == 2) {
+                // 第二引数の候補を追加
+                completions.add("価格");
+            }else if (args.length == 3) {
+                // 第二引数の候補を追加
+                completions.add("宣伝メッセージ");
+            }
+            return completions;
+        }
+        return null;
     }
 
     private void showRandomAd() {
