@@ -14,7 +14,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 public class Paperplus extends JavaPlugin implements TabCompleter {
@@ -59,6 +58,9 @@ public class Paperplus extends JavaPlugin implements TabCompleter {
 
             if (args.length < 3) {
                 player.sendMessage("/ad <時間帯(時間)> <価格(1時間あたり)> <内容>");
+                // 現在の宣伝金額を確認する
+                double totalCost = adList.stream().mapToDouble(Advertisement::getCost).sum();
+                player.sendMessage("現在の宣伝枠で積まれている合計金額: " + totalCost + "円");
                 return true;
             }
 
