@@ -13,14 +13,15 @@ import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.*;
-
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Random;
 public class Paperplus extends JavaPlugin implements TabCompleter {
-    private Queue<Advertisement> adQueue = new LinkedList<>();
+    private final List<Advertisement> adList = new ArrayList<>();
     private BossBar currentBossBar = null;
+    private final Random random = new Random();
     private static Economy econ = null;
-    private List<Advertisement> adList = new ArrayList<>();
-    private Random random = new Random();
     @Override
     public void onEnable() {
         if (!setupEconomy()) {
@@ -30,7 +31,7 @@ public class Paperplus extends JavaPlugin implements TabCompleter {
         }
         saveDefaultConfig();
         reloadConfig();
-        // 他の初期化コード...
+        scheduleAdDisplay(); // 宣伝表示のスケジュールを設定
     }
 
     private boolean setupEconomy() {
@@ -50,40 +51,32 @@ public class Paperplus extends JavaPlugin implements TabCompleter {
     public static Economy getEconomy() {
         return econ;
     }
+
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (cmd.getName().equalsIgnoreCase("ad") && sender instanceof Player) {
             Player player = (Player) sender;
 
-            // コマンドの説明と引数の形式を示す
             if (args.length < 3) {
-                player.sendMessage("コマンドの使い方: /ad <時間帯(時間)> <価格(1時間あたり)> <内容>");
+                player.sendMessage("/ad <時間帯(時間)> <価格(1時間あたり)> <内容>");
                 return true;
             }
 
             try {
-                int durationInHours = Integer.parseInt(args[0]); // 時間単位で入力される時間
-                double pricePerHour = Double.parseDouble(args[1]); // 1時間あたりの価格
-                String message = args[2]; // 宣伝の内容
+                int durationInHours = Integer.parseInt(args[0]);
+                double pricePerHour = Double.parseDouble(args[1]);
+                String message = args[2];
+                double totalCost = durationInHours * pricePerHour;
 
-                double totalCost = pricePerHour * durationInHours; // 総コストの計算
-
-                // 所持金チェック
                 if (getEconomy().getBalance(player) < totalCost) {
-                    player.sendMessage("所持金が不足しています。必要金額: " + totalCost + " 円");
+                    player.sendMessage("所持金が不足しています。必要金額: " + totalCost +"円");
                     return true;
                 }
 
-                // 所持金から料金を引く
                 getEconomy().withdrawPlayer(player, totalCost);
+                adList.add(new Advertisement(player.getName(), message, totalCost));
 
-                // 宣伝リストに追加
-                adList.add(new Advertisement(message, durationInHours * 3600, totalCost));
-                if (currentBossBar == null) {
-                    showRandomAd();
-                }
-
-                player.sendMessage("宣伝が予約されました。料金: " + totalCost + "円");
+                player.sendMessage("宣伝が予約されました。料金: " + totalCost+"円");
             } catch (NumberFormatException e) {
                 player.sendMessage("無効な数値が入力されました。");
             }
@@ -91,6 +84,62 @@ public class Paperplus extends JavaPlugin implements TabCompleter {
         }
         return false;
     }
+
+    private void scheduleAdDisplay() {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!adList.isEmpty()) {
+                    showRandomAdByChance();
+                }
+            }
+        }.runTaskTimer(this, 1200L, 1200L); // 1分ごとに実行
+    }
+
+    private void showRandomAdByChance() {
+        if (currentBossBar != null) {
+            currentBossBar.setVisible(false);
+        }
+
+        double totalCost = adList.stream().mapToDouble(Advertisement::getCost).sum();
+        double randomValue = random.nextDouble() * totalCost;
+
+        double cumulativeCost = 0;
+        for (Advertisement ad : adList) {
+            cumulativeCost += ad.getCost();
+            if (cumulativeCost >= randomValue) {
+                currentBossBar = Bukkit.createBossBar(ad.getMessage(), BarColor.PURPLE, BarStyle.SOLID);
+                currentBossBar.setVisible(true);
+                Bukkit.getOnlinePlayers().forEach(currentBossBar::addPlayer);
+                break;
+            }
+        }
+    }
+
+    private class Advertisement {
+        private final String player;
+        private final String message;
+        private final double cost;
+
+        public Advertisement(String player, String message, double cost) {
+            this.player = player;
+            this.message = message;
+            this.cost = cost;
+        }
+
+        public String getPlayer() {
+            return player;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public double getCost() {
+            return cost;
+        }
+    }
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (command.getName().equalsIgnoreCase("ad")) {
@@ -101,7 +150,7 @@ public class Paperplus extends JavaPlugin implements TabCompleter {
             } else if (args.length == 2) {
                 // 第二引数の候補を追加
                 completions.add("価格");
-            }else if (args.length == 3) {
+            } else if (args.length == 3) {
                 // 第二引数の候補を追加
                 completions.add("宣伝メッセージ");
             }
@@ -109,57 +158,7 @@ public class Paperplus extends JavaPlugin implements TabCompleter {
         }
         return null;
     }
-
-    private void showRandomAd() {
-        if (currentBossBar != null || adList.isEmpty()) {
-            return;
-        }
-
-        // 金額が高い宣伝を優先して選択
-        Advertisement ad = adList.stream()
-                .max(Comparator.comparingDouble(Advertisement::getCost))
-                .orElseThrow();
-
-        adList.remove(ad);
-        currentBossBar = Bukkit.createBossBar(ad.getMessage(), BarColor.PURPLE, BarStyle.SOLID);
-        currentBossBar.setVisible(true);
-        Bukkit.getOnlinePlayers().forEach(currentBossBar::addPlayer);
-
-        // 1分後に宣伝を切り替える
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                currentBossBar.setVisible(false);
-                currentBossBar = null;
-                if (!adList.isEmpty()) {
-                    showRandomAd(); // 次の宣伝を表示
-                }
-            }
-        }.runTaskLater(this, 1200L); // 1分 = 1200ティック
-    }
-
-    private class Advertisement {
-        private final String message;
-        private final int duration; // 秒単位
-        private final double cost; // この宣伝に対する支払い金額
-
-        public Advertisement(String message, int duration, double cost) {
-            this.message = message;
-            this.duration = duration;
-            this.cost = cost;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public int getDuration() {
-            return duration;
-        }
-
-        public double getCost() {
-            return cost;
-        }
-    }
 }
+
+
 
