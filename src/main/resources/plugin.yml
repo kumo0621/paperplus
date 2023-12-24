@@ -5,8 +5,8 @@ api-version: '1.20'
 commands:
   ad:
     aliases: ad
-    permission: chat
+    permission: ad
 
 permissions:
-  chat:
+  ad:
     default: true
