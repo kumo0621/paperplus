@@ -27,6 +27,11 @@ public class Paperplus extends JavaPlugin implements TabCompleter {
 
     @Override
     public void onEnable() {
+        if (!setupEconomy()) {
+            getLogger().severe(String.format("[%s] - Disabled due to no Vault dependency found!", getDescription().getName()));
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         // Plugin startup logic
         saveDefaultConfig();
@@ -34,13 +39,8 @@ public class Paperplus extends JavaPlugin implements TabCompleter {
         // コンフィグファイルを取得
         config = getConfig();
 
-        // コンフィグファイルに message という変数がなければ、デフォルト値を設定
-        if (!config.contains("message")) {
-            config.set("message", "Hello, world!");
-        }
-
-        // コンフィグファイルに変更を加えたら、ファイルに保存
-        saveConfig();
+        reloadConfig();
+        scheduleAdDisplay(); // 宣伝表示のスケジュールを設定
     }
 
     private boolean setupEconomy() {
