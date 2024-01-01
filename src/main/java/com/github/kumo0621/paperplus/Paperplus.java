@@ -8,6 +8,7 @@ import org.bukkit.boss.BossBar;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -16,21 +17,30 @@ import org.bukkit.scheduler.BukkitRunnable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+
 public class Paperplus extends JavaPlugin implements TabCompleter {
     private final List<Advertisement> adList = new ArrayList<>();
     private BossBar currentBossBar = null;
     private final Random random = new Random();
     private static Economy econ = null;
+    private FileConfiguration config;
+
     @Override
     public void onEnable() {
-        if (!setupEconomy()) {
-            getLogger().severe(String.format("[%s] - Disabled due to no Vault dependency found!", getDescription().getName()));
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
+
+        // Plugin startup logic
         saveDefaultConfig();
-        reloadConfig();
-        scheduleAdDisplay(); // 宣伝表示のスケジュールを設定
+
+        // コンフィグファイルを取得
+        config = getConfig();
+
+        // コンフィグファイルに message という変数がなければ、デフォルト値を設定
+        if (!config.contains("message")) {
+            config.set("message", "Hello, world!");
+        }
+
+        // コンフィグファイルに変更を加えたら、ファイルに保存
+        saveConfig();
     }
 
     private boolean setupEconomy() {
@@ -70,15 +80,33 @@ public class Paperplus extends JavaPlugin implements TabCompleter {
                 String message = args[2];
                 double totalCost = durationInHours * pricePerHour;
 
+                // コンフィグファイルに保存されている message の値を取得
+                List<String> nclist = config.getStringList("ngWords");
+
+                // messageにNGワードが含まれているかどうかをチェック
+                boolean containsNgWord = false;
+                for (String ngWord : nclist) {
+                    if (message.contains(ngWord)) {
+                        containsNgWord = true;
+                        break;
+                    }
+                }
+
+                // NGワードが含まれていたら、処理を終了する
+                if (containsNgWord) {
+                    player.sendMessage("NGワードが検出されました。宣伝はできません。");
+                    return true;
+                }
+
                 if (getEconomy().getBalance(player) < totalCost) {
-                    player.sendMessage("所持金が不足しています。必要金額: " + totalCost +"円");
+                    player.sendMessage("所持金が不足しています。必要金額: " + totalCost + "円");
                     return true;
                 }
 
                 getEconomy().withdrawPlayer(player, totalCost);
                 adList.add(new Advertisement(player.getName(), message, totalCost));
 
-                player.sendMessage("宣伝が予約されました。料金: " + totalCost+"円");
+                player.sendMessage("宣伝が予約されました。料金: " + totalCost + "円");
             } catch (NumberFormatException e) {
                 player.sendMessage("無効な数値が入力されました。");
             }
